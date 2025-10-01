@@ -195,12 +195,17 @@ def uploaded_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
 
 if __name__ == '__main__':
+    # This is for local development only
+    # In production, Gunicorn will handle the server
+    port = int(os.environ.get('PORT', 5001))
     print("🧠 Stroke Classification Web App")
     print("=" * 40)
     print(f"🔧 Model loaded: {'✅ Yes' if model_loaded else '❌ No'}")
     print(f"🖥️  Device: {device}")
     print(f"📁 Upload folder: {UPLOAD_FOLDER}")
-    print("🌐 Starting Flask server...")
-    print("🔗 Open http://localhost:5001 in your browser")
+    print(f"🌐 Starting Flask server on port {port}...")
+    print(f"🔗 Open http://localhost:{port} in your browser")
     
-    app.run(debug=True, host='0.0.0.0', port=5001)
+    # Use production settings when deployed
+    debug_mode = os.environ.get('FLASK_ENV') != 'production'
+    app.run(debug=debug_mode, host='0.0.0.0', port=port)
