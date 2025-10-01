@@ -1,0 +1,206 @@
+from flask import Flask, render_template, request, jsonify, send_from_directory
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torchvision.transforms as transforms
+from PIL import Image
+import numpy as np
+import cv2
+import base64
+import io
+import os
+from pathlib import Path
+import datetime
+import pandas as pd
+
+app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+
+# Configuration
+UPLOAD_FOLDER = 'uploads'
+MODEL_PATH = 'simple_stroke_model.pth'
+CLASS_LABELS = ["Hemorrhagic", "Ischaemic", "Normal"]
+IMG_SIZE = 128
+
+# Create uploads directory
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# Simple CNN model (same as training)
+class SimpleStrokeClassifier(nn.Module):
+    def __init__(self, num_classes=3):
+        super(SimpleStrokeClassifier, self).__init__()
+        
+        self.features = nn.Sequential(
+            nn.Conv2d(1, 32, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2),
+            
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2),
+            
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2),
+            
+            nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.AdaptiveAvgPool2d((4, 4))
+        )
+        
+        self.classifier = nn.Sequential(
+            nn.Dropout(0.3),
+            nn.Linear(256 * 4 * 4, 128),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.3),
+            nn.Linear(128, num_classes)
+        )
+    
+    def forward(self, x):
+        x = self.features(x)
+        x = x.view(x.size(0), -1)
+        x = self.classifier(x)
+        return x
+
+# Load the trained model
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = SimpleStrokeClassifier(num_classes=3)
+
+try:
+    checkpoint = torch.load(MODEL_PATH, map_location=device)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.eval()
+    model_loaded = True
+    print(f"✅ Model loaded successfully from {MODEL_PATH}")
+    print(f"🎯 Model validation accuracy: {checkpoint.get('val_acc', 'Unknown'):.4f}")
+except Exception as e:
+    print(f"❌ Error loading model: {e}")
+    print("⚠️ Please run the training notebook first to create 'simple_stroke_model.pth'")
+    model_loaded = False
+
+# Image preprocessing
+transform = transforms.Compose([
+    transforms.Resize((IMG_SIZE, IMG_SIZE)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5], std=[0.5])
+])
+
+def preprocess_image(image_file):
+    """Preprocess uploaded image for model prediction"""
+    try:
+        # Read image
+        image = Image.open(image_file)
+        
+        # Convert to grayscale if needed
+        if image.mode != 'L':
+            image = image.convert('L')
+        
+        # Apply transforms
+        image_tensor = transform(image).unsqueeze(0)  # Add batch dimension
+        
+        return image_tensor, None
+    except Exception as e:
+        return None, str(e)
+
+def predict_stroke(image_tensor):
+    """Make stroke classification prediction"""
+    if not model_loaded:
+        return None, "Model not loaded"
+    
+    try:
+        with torch.no_grad():
+            image_tensor = image_tensor.to(device)
+            outputs = model(image_tensor)
+            probabilities = F.softmax(outputs, dim=1)
+            confidence, predicted = torch.max(probabilities, 1)
+            
+            # Get all class probabilities
+            probs = probabilities[0].cpu().numpy()
+            
+            result = {
+                'predicted_class': CLASS_LABELS[predicted.item()],
+                'confidence': confidence.item(),
+                'probabilities': {
+                    CLASS_LABELS[i]: float(prob) for i, prob in enumerate(probs)
+                }
+            }
+            
+            return result, None
+    except Exception as e:
+        return None, str(e)
+
+@app.route('/')
+def index():
+    """Main page"""
+    return render_template('index.html', model_loaded=model_loaded)
+
+@app.route('/predict', methods=['POST'])
+def predict():
+    """Handle prediction requests"""
+    if not model_loaded:
+        return jsonify({
+            'success': False, 
+            'error': 'Model not loaded. Please run training first.'
+        })
+    
+    if 'image' not in request.files:
+        return jsonify({'success': False, 'error': 'No image uploaded'})
+    
+    image_file = request.files['image']
+    
+    if image_file.filename == '':
+        return jsonify({'success': False, 'error': 'No image selected'})
+    
+    try:
+        # Preprocess image
+        image_tensor, error = preprocess_image(image_file)
+        if error:
+            return jsonify({'success': False, 'error': f'Image processing error: {error}'})
+        
+        # Make prediction
+        result, error = predict_stroke(image_tensor)
+        if error:
+            return jsonify({'success': False, 'error': f'Prediction error: {error}'})
+        
+        # Save uploaded image (optional)
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"upload_{timestamp}_{image_file.filename}"
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
+        image_file.seek(0)  # Reset file pointer
+        image_file.save(filepath)
+        
+        # Add metadata
+        result['filename'] = filename
+        result['timestamp'] = timestamp
+        result['success'] = True
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/health')
+def health():
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'healthy',
+        'model_loaded': model_loaded,
+        'device': str(device),
+        'timestamp': datetime.datetime.now().isoformat()
+    })
+
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    """Serve uploaded files"""
+    return send_from_directory(UPLOAD_FOLDER, filename)
+
+if __name__ == '__main__':
+    print("🧠 Stroke Classification Web App")
+    print("=" * 40)
+    print(f"🔧 Model loaded: {'✅ Yes' if model_loaded else '❌ No'}")
+    print(f"🖥️  Device: {device}")
+    print(f"📁 Upload folder: {UPLOAD_FOLDER}")
+    print("🌐 Starting Flask server...")
+    print("🔗 Open http://localhost:5001 in your browser")
+    
+    app.run(debug=True, host='0.0.0.0', port=5001)

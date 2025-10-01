@@ -1,0 +1,85 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyTorch models (we'll selectively add the important ones)
+*.pth
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# Environment variables
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Dataset folders (too large for GitHub)
+train/
+test/
+valid/
+preprocessed_train/
+preprocessed_test/
+preprocessed_valid/
+
+# Results and logs
+results/
+*.log
+*.txt
+*.csv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+
+# Upload folder contents (not the folder itself)
+uploads/*
+!uploads/.gitkeep
+
+# Large training notebooks (keep only essential ones)
+stroke_multiclass.ipynb
+stroke_preprocessing.ipynb
+stroke_training.ipynb
+stroke_training_pytorch.ipynb
+simple_training.ipynb
+stroke_class.ipynb

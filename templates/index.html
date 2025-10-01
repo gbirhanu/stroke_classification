@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧠 Stroke Classification Demo</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .main-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            margin-top: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .content-wrapper {
+            min-height: 70vh;
+        }
+        
+        .upload-section {
+            border-right: 2px solid #e9ecef;
+            padding-right: 2rem;
+        }
+        
+        .results-section {
+            padding-left: 2rem;
+        }
+        
+        @media (max-width: 991px) {
+            .upload-section {
+                border-right: none;
+                border-bottom: 2px solid #e9ecef;
+                padding-right: 1rem;
+                padding-bottom: 2rem;
+                margin-bottom: 2rem;
+            }
+            
+            .results-section {
+                padding-left: 1rem;
+            }
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 20px 20px 0 0;
+            padding: 2rem;
+            text-align: center;
+        }
+        
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 3rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            background: #f8f9ff;
+        }
+        
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f0f2ff;
+        }
+        
+        .upload-area.dragover {
+            border-color: #28a745;
+            background: #e8f5e8;
+        }
+        
+        .preview-container {
+            margin-top: 1rem;
+            text-align: center;
+        }
+        
+        .preview-image {
+            max-width: 200px;
+            max-height: 200px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .result-card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            border: none;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .prob-bar {
+            height: 30px;
+            border-radius: 15px;
+            transition: width 0.5s ease;
+        }
+        
+        .hemorrhagic { background: linear-gradient(90deg, #dc3545, #ff6b7d); }
+        .ischaemic { background: linear-gradient(90deg, #ffc107, #ffcd3c); }
+        .normal { background: linear-gradient(90deg, #28a745, #5cbf72); }
+        
+        .status-badge {
+            border-radius: 20px;
+            padding: 0.5rem 1rem;
+            font-weight: bold;
+        }
+        
+        .model-status {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+        }
+        
+        .loading-spinner {
+            display: none;
+            margin: 1rem auto;
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .confidence-meter {
+            background: #e9ecef;
+            border-radius: 10px;
+            height: 8px;
+            overflow: hidden;
+        }
+        
+        .confidence-fill {
+            height: 100%;
+            border-radius: 10px;
+            transition: width 0.8s ease, background-color 0.3s ease;
+        }
+        
+        .high-confidence { background: linear-gradient(90deg, #28a745, #20c997); }
+        .medium-confidence { background: linear-gradient(90deg, #ffc107, #fd7e14); }
+        .low-confidence { background: linear-gradient(90deg, #dc3545, #e74c3c); }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row justify-content-center">
+            <div class="col-lg-10 col-xl-11">
+                <div class="main-container">
+                    <!-- Header -->
+                    <div class="header">
+                        <div class="model-status">
+                            {% if model_loaded %}
+                                <span class="status-badge bg-success">
+                                    <i class="fas fa-check-circle"></i> Model Ready
+                                </span>
+                            {% else %}
+                                <span class="status-badge bg-danger">
+                                    <i class="fas fa-exclamation-triangle"></i> Model Not Loaded
+                                </span>
+                            {% endif %}
+                        </div>
+                        
+                        <h1 class="mb-3 mt-3">
+                            <i class="fas fa-brain"></i> Stroke Classification
+                        </h1>
+                        <p class="mb-0">Upload a brain scan image for AI-powered stroke detection</p>
+                        <small class="text-light">Supports PNG, JPG, JPEG formats</small>
+                    </div>
+                    
+                    <!-- Main Content -->
+                    <div class="p-4">
+                        {% if not model_loaded %}
+                        <div class="alert alert-warning" role="alert">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <strong>Model Not Available</strong><br>
+                            Please run the training notebook first to create the model file.
+                        </div>
+                        {% endif %}
+                        
+                        <div class="row content-wrapper">
+                            <!-- Left Column: Upload Section -->
+                            <div class="col-lg-6 upload-section">
+                                <h5 class="mb-4"><i class="fas fa-upload"></i> Upload Brain Scan</h5>
+                                
+                                <!-- Upload Area -->
+                                <div class="upload-area" id="uploadArea" onclick="document.getElementById('imageInput').click()">
+                                    <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                                    <h4 class="text-muted">Click to Upload Brain Scan</h4>
+                                    <p class="text-muted mb-0">or drag and drop an image here</p>
+                                    <input type="file" id="imageInput" class="d-none" accept="image/*">
+                                </div>
+                                
+                                <!-- Image Preview -->
+                                <div class="preview-container" id="previewContainer" style="display: none;">
+                                    <img id="previewImage" class="preview-image" alt="Preview">
+                                    <div class="mt-3">
+                                        <button class="btn btn-primary btn-lg" id="predictBtn" onclick="predict()" disabled>
+                                            <i class="fas fa-brain"></i> Analyze Scan
+                                        </button>
+                                        <button class="btn btn-secondary btn-sm ms-2" onclick="clearUpload()">
+                                            <i class="fas fa-times"></i> Clear
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Loading Spinner -->
+                                <div class="loading-spinner" id="loadingSpinner">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Analyzing...</span>
+                                    </div>
+                                    <p class="mt-2 text-muted">Analyzing brain scan...</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Right Column: Results Section -->
+                            <div class="col-lg-6 results-section">
+                                <h5 class="mb-4"><i class="fas fa-chart-bar"></i> Analysis Results</h5>
+                                
+                                <div id="noResults" class="text-center text-muted" style="margin-top: 4rem;">
+                                    <i class="fas fa-brain fa-3x mb-3" style="opacity: 0.3;"></i>
+                                    <h6>Upload an image to see results</h6>
+                                    <p>The AI analysis will appear here</p>
+                                </div>
+                                
+                                <!-- Results -->
+                                <div id="results" style="display: none;">
+                                    <div class="card result-card fade-in">
+                                        <div class="card-body">
+                                            <!-- Primary Prediction -->
+                                            <div class="alert" id="primaryResult" role="alert">
+                                                <h6 class="mb-2"><i class="fas fa-bullseye"></i> <strong>Prediction:</strong></h6>
+                                                <h4 id="predictedClass" class="mb-2"></h4>
+                                                <div class="confidence-meter">
+                                                    <div class="confidence-fill" id="confidenceFill"></div>
+                                                </div>
+                                                <small class="text-muted">Confidence: <span id="confidenceText"></span></small>
+                                            </div>
+                                            
+                                            <!-- Detailed Probabilities -->
+                                            <h6 class="mt-4 mb-3">
+                                                <i class="fas fa-percentage"></i> Class Probabilities
+                                            </h6>
+                                            
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold">🩸 Hemorrhagic Stroke</label>
+                                                <div class="progress" style="height: 25px;">
+                                                    <div class="progress-bar hemorrhagic" id="hemBar" role="progressbar"></div>
+                                                </div>
+                                                <small id="hemProb" class="text-muted"></small>
+                                            </div>
+                                            
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold">🧠 Ischaemic Stroke</label>
+                                                <div class="progress" style="height: 25px;">
+                                                    <div class="progress-bar ischaemic" id="ischBar" role="progressbar"></div>
+                                                </div>
+                                                <small id="ischProb" class="text-muted"></small>
+                                            </div>
+                                            
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold">✅ Normal</label>
+                                                <div class="progress" style="height: 25px;">
+                                                    <div class="progress-bar normal" id="normBar" role="progressbar"></div>
+                                                </div>
+                                                <small id="normProb" class="text-muted"></small>
+                                            </div>
+                                            
+                                            <div class="mt-3">
+                                                <small class="text-muted">
+                                                    <i class="fas fa-info-circle"></i>
+                                                    <strong>Disclaimer:</strong> This is a research demo. Always consult medical professionals for diagnosis.
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let uploadedFile = null;
+        
+        // File input handler
+        document.getElementById('imageInput').addEventListener('change', function(event) {
+            handleFile(event.target.files[0]);
+        });
+        
+        // Drag and drop handlers
+        const uploadArea = document.getElementById('uploadArea');
+        
+        uploadArea.addEventListener('dragover', function(event) {
+            event.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', function(event) {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', function(event) {
+            event.preventDefault();
+            uploadArea.classList.remove('dragover');
+            handleFile(event.dataTransfer.files[0]);
+        });
+        
+        function handleFile(file) {
+            if (!file || !file.type.startsWith('image/')) {
+                alert('Please select a valid image file.');
+                return;
+            }
+            
+            uploadedFile = file;
+            
+            // Show preview
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('previewImage').src = e.target.result;
+                document.getElementById('previewContainer').style.display = 'block';
+                document.getElementById('predictBtn').disabled = false;
+                
+                // Hide previous results and show placeholder
+                document.getElementById('results').style.display = 'none';
+                document.getElementById('noResults').style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        async function predict() {
+            if (!uploadedFile) return;
+            
+            // Show loading
+            document.getElementById('loadingSpinner').style.display = 'block';
+            document.getElementById('predictBtn').disabled = true;
+            document.getElementById('results').style.display = 'none';
+            
+            // Prepare form data
+            const formData = new FormData();
+            formData.append('image', uploadedFile);
+            
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayResults(result);
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                alert('Network error: ' + error.message);
+            } finally {
+                // Hide loading
+                document.getElementById('loadingSpinner').style.display = 'none';
+                document.getElementById('predictBtn').disabled = false;
+            }
+        }
+        
+        function displayResults(result) {
+            // Primary prediction
+            document.getElementById('predictedClass').textContent = result.predicted_class;
+            document.getElementById('confidenceText').textContent = (result.confidence * 100).toFixed(1) + '%';
+            
+            // Set confidence meter
+            const confidenceFill = document.getElementById('confidenceFill');
+            const confidencePercent = result.confidence * 100;
+            confidenceFill.style.width = confidencePercent + '%';
+            
+            // Color confidence meter based on confidence level
+            confidenceFill.className = 'confidence-fill';
+            if (confidencePercent >= 80) {
+                confidenceFill.classList.add('high-confidence');
+            } else if (confidencePercent >= 60) {
+                confidenceFill.classList.add('medium-confidence');
+            } else {
+                confidenceFill.classList.add('low-confidence');
+            }
+            
+            // Set primary result alert color
+            const primaryResult = document.getElementById('primaryResult');
+            primaryResult.className = 'alert';
+            if (result.predicted_class === 'Hemorrhagic') {
+                primaryResult.classList.add('alert-danger');
+            } else if (result.predicted_class === 'Ischaemic') {
+                primaryResult.classList.add('alert-warning');
+            } else {
+                primaryResult.classList.add('alert-success');
+            }
+            
+            // Detailed probabilities
+            const probs = result.probabilities;
+            
+            // Hemorrhagic
+            const hemPercent = (probs['Hemorrhagic'] * 100).toFixed(1);
+            document.getElementById('hemBar').style.width = hemPercent + '%';
+            document.getElementById('hemProb').textContent = hemPercent + '%';
+            
+            // Ischaemic
+            const ischPercent = (probs['Ischaemic'] * 100).toFixed(1);
+            document.getElementById('ischBar').style.width = ischPercent + '%';
+            document.getElementById('ischProb').textContent = ischPercent + '%';
+            
+            // Normal
+            const normPercent = (probs['Normal'] * 100).toFixed(1);
+            document.getElementById('normBar').style.width = normPercent + '%';
+            document.getElementById('normProb').textContent = normPercent + '%';
+            
+			// Show results
+			document.getElementById('noResults').style.display = 'none';
+			document.getElementById('results').style.display = 'block';
+            document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        function clearUpload() {
+            uploadedFile = null;
+            document.getElementById('previewContainer').style.display = 'none';
+            document.getElementById('results').style.display = 'none';
+			document.getElementById('noResults').style.display = 'block';
+            document.getElementById('imageInput').value = '';
+            document.getElementById('predictBtn').disabled = true;
+        }
+    </script>
+</body>
+</html>
