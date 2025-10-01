@@ -5,11 +5,11 @@ import multiprocessing
 bind = f"0.0.0.0:{os.environ.get('PORT', '10000')}"
 backlog = 2048
 
-# Worker processes
-workers = multiprocessing.cpu_count() * 2 + 1
+# Worker processes (reduced for memory constraints)
+workers = 1  # Single worker for Render free tier (512MB RAM)
 worker_class = "sync"
-worker_connections = 1000
-timeout = 30
+worker_connections = 100
+timeout = 60
 keepalive = 2
 
 # Restart workers after this many requests, to help prevent memory leaks
