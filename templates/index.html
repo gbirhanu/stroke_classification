@@ -353,12 +353,33 @@
             formData.append('image', uploadedFile);
             
             try {
+                console.log('Sending request to /predict');
                 const response = await fetch('/predict', {
                     method: 'POST',
-                    body: formData
+                    body: formData,
+                    // Don't set Content-Type, let browser set it with boundary for FormData
                 });
                 
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+                
+                // Check if response is OK
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Server error response:', errorText);
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                // Check content type
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const responseText = await response.text();
+                    console.error('Non-JSON response:', responseText);
+                    throw new Error('Server returned non-JSON response. Check if /predict endpoint exists.');
+                }
+                
                 const result = await response.json();
+                console.log('Response data:', result);
                 
                 if (result.success) {
                     displayResults(result);
@@ -366,7 +387,8 @@
                     alert('Error: ' + result.error);
                 }
             } catch (error) {
-                alert('Network error: ' + error.message);
+                console.error('Fetch error:', error);
+                alert('Network error: ' + error.message + '\n\nCheck browser console for details.');
             } finally {
                 // Hide loading
                 document.getElementById('loadingSpinner').style.display = 'none';

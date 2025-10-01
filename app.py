@@ -16,6 +16,14 @@ import pandas as pd
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
+# Add CORS support for cross-origin requests
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
+
 # Configuration
 UPLOAD_FOLDER = 'uploads'
 MODEL_PATH = 'simple_stroke_model.pth'
@@ -137,7 +145,12 @@ def index():
 @app.route('/predict', methods=['POST'])
 def predict():
     """Handle prediction requests"""
+    print(f"🔥 Predict endpoint called - Method: {request.method}")
+    print(f"📁 Files in request: {list(request.files.keys())}")
+    print(f"🌐 Request headers: {dict(request.headers)}")
+    
     if not model_loaded:
+        print("❌ Model not loaded")
         return jsonify({
             'success': False, 
             'error': 'Model not loaded. Please run training first.'
@@ -152,15 +165,23 @@ def predict():
         return jsonify({'success': False, 'error': 'No image selected'})
     
     try:
+        print(f"✅ Processing image: {image_file.filename}")
+        
         # Preprocess image
         image_tensor, error = preprocess_image(image_file)
         if error:
+            print(f"❌ Image preprocessing error: {error}")
             return jsonify({'success': False, 'error': f'Image processing error: {error}'})
+        
+        print(f"✅ Image preprocessed successfully, tensor shape: {image_tensor.shape}")
         
         # Make prediction
         result, error = predict_stroke(image_tensor)
         if error:
+            print(f"❌ Prediction error: {error}")
             return jsonify({'success': False, 'error': f'Prediction error: {error}'})
+        
+        print(f"✅ Prediction successful: {result['predicted_class']} ({result['confidence']:.3f})")
         
         # Save uploaded image (optional)
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -178,6 +199,15 @@ def predict():
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/test', methods=['GET', 'POST'])
+def test():
+    """Test endpoint for debugging"""
+    return jsonify({
+        'status': 'test endpoint working',
+        'method': request.method,
+        'timestamp': datetime.datetime.now().isoformat()
+    })
 
 @app.route('/health')
 def health():
