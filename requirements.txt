@@ -1,17 +1,18 @@
 # Core dependencies for stroke classification web app
 Flask==2.3.3
-torch==2.2.0
-torchvision==0.17.0
-Pillow>=10.2.0
-numpy>=1.26.0,<2.0
-opencv-python==4.8.1.78
+torch==2.0.1
+torchvision==0.15.2
+Pillow>=9.5.0
+numpy>=1.24.0,<2.0
+opencv-python-headless==4.8.1.78
 
-# Optional dependencies (if not already installed)
+# Flask dependencies
 Werkzeug==2.3.7
 Jinja2==3.1.2
 MarkupSafe==2.1.3
 click==8.1.7
 itsdangerous==2.1.2
 
-# For development/testing
+# For production deployment
 requests==2.31.0
+gunicorn==21.2.0
